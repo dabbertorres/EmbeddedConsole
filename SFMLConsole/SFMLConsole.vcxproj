@@ -145,9 +145,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="BitmapFont.hpp" />
+    <ClInclude Include="BitmapText.hpp" />
     <ClInclude Include="Console.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BitmapFont.cpp" />
+    <ClCompile Include="BitmapText.cpp" />
     <ClCompile Include="Console.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

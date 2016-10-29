@@ -18,9 +18,21 @@
     <ClInclude Include="Console.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="BitmapFont.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BitmapText.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Console.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BitmapFont.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BitmapText.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

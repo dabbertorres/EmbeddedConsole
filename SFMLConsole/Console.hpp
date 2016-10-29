@@ -2,6 +2,7 @@
 #define DBR_CNSL_CONSOLE_HPP
 
 #include <vector>
+#include <array>
 #include <unordered_map>
 #include <functional>
 
@@ -9,17 +10,21 @@
 #include <SFML/Graphics/Text.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
 
-/*#include <SFML/System/Clock.hpp>
-#include <SFML/System/Time.hpp>*/
+#include <SFML/System/Clock.hpp>
+#include <SFML/System/Time.hpp>
 
-// sfml forward declarations
+// forward declarations
 namespace sf
 {
-	class Drawable;
-	class Transformable;
-	class Font;
-	class View;
 	class Event;
+}
+
+namespace dbr
+{
+	namespace sfml
+	{
+		class BitmapFont;
+	}
 }
 
 // std::hash for SFML's String class
@@ -52,13 +57,11 @@ namespace dbr
 				Underscore,
 			};*/
 
-			Console();
-
-			Console(const sf::String& prompt, const sf::Font& font);
+			Console(const sfml::BitmapFont& font);
+			Console(const sf::String& prompt, const sfml::BitmapFont& font);
 
 			/// \param size Size in characters
-			Console(const sf::Vector2u& size, float charSize);
-			Console(const sf::Vector2u& size, float charSize, const sf::String& prompt, const sf::Font& font);
+			Console(sf::Vector2u size, sf::Vector2f charScale, const sf::String& prompt, const sfml::BitmapFont& font);
 
 			Console(const Console& other);
 			Console(Console&& other);
@@ -66,12 +69,13 @@ namespace dbr
 			~Console() = default;
 
 			/* actions */
+
 			void update(const sf::Event& event);
 			void clear();
 
 			void addCommand(const sf::String& name, Command&& command);
 
-			// true/false command does/doesn't exist
+			// returns true/false command does/doesn't exist
 			bool run(const sf::String& entry);
 
 			template<typename T>
@@ -79,69 +83,82 @@ namespace dbr
 
 			/* properties functions */
 
-			// the font (for best behavior) should be monospace!
-			const sf::Font* getFont() const;
-			void setFont(const sf::Font& font);
+			const sfml::BitmapFont* getFont() const;
+			void setFont(const sfml::BitmapFont& font);
 
-			/*sf::Vector2u cursorAt() const;
-			void cursorAt(const sf::Vector2u& pos);*/
+			std::size_t cursorAt() const;
+			void cursorAt(std::size_t idx);
 
-			float characterSize() const;
-			void characterSize(float val);
+			sf::Vector2f characterScale() const;
+			void characterScale(sf::Vector2f scale);
 
-			// provided if custom input handling is desired.
-			// Could be used for providing user access to a scripting language
-			// Called when an entry does not match a previously provided command or "clear"
-			// all input is provided to the single argument
+			// provided if custom input handling is desired (ie: used for providing user access to a scripting language)
+			// Called when an entry does not match a provided command or "clear"
+			// all input is provided as a single argument
 			EntryHandler entryHandler;
 
 			/* data */
+
 			bool hasFocus;
 
 			sf::Color background;
 			sf::Color baseForeground;
 
-			/*sf::Time cursorBlinkPeriod;*/
+			sf::Time cursorBlinkPeriod;
 
 		private:
-			// convenience "do the work" called from other constructors
-			// private to prevent a user from passing in an invalid (null) sf::Font
-			Console(const sf::Vector2u& size, float charSize, const sf::String& prompt, const sf::Font* font);
+			struct alignas(sf::Vertex) Cell
+			{
+				std::array<sf::Vertex, 4> vertices;
 
-			void addText(const sf::String& str, sf::Text::Style style, sf::Color foreground, bool newline = true);
-			void newPrompt(bool top = false);
+				void setColor(sf::Color color);
+				void setPosition(sf::Vector2f pos);
+				void setSize(sf::Vector2f size);
+				void setTexCoord(sf::FloatRect rect);
+			};
+
+			void addChar(sf::Uint32 unicode);
+			void addString(const sf::String& str);
+			void removeChars(std::size_t count = 1);
+			std::size_t nextLine();
+			void newPrompt();
 			void setupSizes();
+			void addHistory(const sf::String& str);
+			void useHistory();
 
 			void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
 
 			std::unordered_map<sf::String, Command> commands;
 
-			const sf::Font* font;
-			std::vector<sf::Text> texts;
-			std::size_t entryBufferLen;		// number of sf::Texts that are part of the entry buffer (from the end of this->texts)
+			std::vector<sf::String> entryHistory;
+			std::size_t historyIndex;
 
-			// size a single character uses
-			sf::Vector2f charSize;
+			const sfml::BitmapFont* font;
+			sf::String buffer;
+
+			// amount to scale a single character by
+			sf::Vector2f charScale;
 
 			// size in characters of the console
 			sf::Vector2u size;
 
+			// text drawing container
+			std::vector<Cell> cells;
+
+			// content transformations
 			mutable sf::View contentView;
 
-			/*sf::Vector2u cursorPosition;*/
+			std::size_t cursorIndex;
 			std::size_t lineNumber;
-			/*sf::RectangleShape cursor;*/
+			sf::RectangleShape cursor;
 			/*Cursor cursorType;*/
 
 			sf::RectangleShape backgroundShape;
 
 			sf::String prompt;
 
-			// used in conjunction with clear() and newPrompt()
-			bool noNewPrompt;
-
-			/*bool drawCursor;
-			sf::Clock blinkClock;*/
+			mutable bool drawCursor;
+			mutable sf::Clock blinkClock;
 		};
 
 		template<typename T>
@@ -150,8 +167,7 @@ namespace dbr
 			std::ostringstream oss;
 			oss << t;
 
-			if(txt)
-				texts.push_back(addText({0, lineNumber * charSize * 1.f / aspectRatio}, txt));
+			addString(oss.str());
 
 			return *this;
 		}

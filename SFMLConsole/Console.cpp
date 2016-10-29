@@ -7,6 +7,8 @@
 
 #include <SFML/Window/Event.hpp>
 
+#include "BitmapFont.hpp"
+
 static std::vector<sf::String> split(const sf::String& str, sf::Uint32 splitOn)
 {
 	std::vector<sf::String> ret;
@@ -42,44 +44,76 @@ namespace dbr
 {
 	namespace cnsl
 	{
-		Console::Console()
-			: Console{{80, 24}, 20}
+		Console::Console(const sfml::BitmapFont& font)
+			: Console("$ ", font)
 		{}
 
-		Console::Console(const sf::String& prompt, const sf::Font& font)
-			: Console{{80, 24}, 20, prompt, &font}
+		Console::Console(const sf::String& prompt, const sfml::BitmapFont& font)
+			: Console{{80, 24}, {1.f, 1.f}, prompt, font}
 		{}
 
-		Console::Console(const sf::Vector2u& size, float charSize)
-			: Console{size, charSize, "$ ", nullptr}
-		{}
+		Console::Console(sf::Vector2u size, sf::Vector2f charScale, const sf::String& prompt, const sfml::BitmapFont& font)
+			: entryHandler{},
+			hasFocus{false},
+			background{0, 0, 0, 230},
+			baseForeground{sf::Color::White},
+			cursorBlinkPeriod{sf::milliseconds(500)},
+			commands{},
+			font{&font},
+			size{size},
+			cells{size.x * size.y},
+			charScale{charScale},
+			contentView{{0, 0, static_cast<float>(size.x * font.getGlyphSize().x * charScale.x), static_cast<float>(size.y * font.getGlyphSize().y * charScale.y)}},
+			cursorIndex{0},
+			lineNumber{0},
+			cursor{{font.getGlyphSize().x * charScale.x, font.getGlyphSize().y * charScale.y}},
+			//cursorType{Cursor::Underscore},
+			backgroundShape{contentView.getSize()},
+			prompt{prompt},
+			drawCursor{false},
+			blinkClock{}
+		{
+			backgroundShape.setFillColor(background);
+			backgroundShape.setOutlineColor(baseForeground);
+			backgroundShape.setOutlineThickness(1);
 
-		Console::Console(const sf::Vector2u& size, float charSize, const sf::String& prompt, const sf::Font& font)
-			: Console{size, charSize, prompt, &font}
-		{}
+			auto charSize = font.getGlyphSize();
+			auto realSize = sf::Vector2f{charScale.x * charSize.x, charScale.y * charSize.y};
+
+			for(auto i = 0u; i < cells.size(); ++i)
+			{
+				sf::Vector2f topLeft = {static_cast<float>(i % size.x * realSize.x),
+										static_cast<float>(i / size.x * realSize.y)};
+
+				cells[i].setPosition(topLeft);
+				cells[i].setSize(realSize);
+				cells[i].setColor(background);	// background, because characters shouldn't be visible yet
+			}
+
+			cursor.setFillColor(baseForeground);
+
+			addString(prompt);
+		}
 
 		Console::Console(const Console& other)
 			: entryHandler{other.entryHandler},
 			hasFocus{other.hasFocus},
 			background{other.background},
 			baseForeground{other.baseForeground},
-//			cursorBlinkPeriod{other.cursorBlinkPeriod},
+			cursorBlinkPeriod{other.cursorBlinkPeriod},
 			commands{other.commands},
+			entryHistory(other.entryHistory),
 			font{other.font},
-			texts{other.texts},
-			entryBufferLen{other.entryBufferLen},
 			size{other.size},
-			charSize{other.charSize},
+			charScale{other.charScale},
 			contentView{other.contentView},
-//			cursorPosition{other.cursorPosition},
 			lineNumber{other.lineNumber},
-//			cursor{other.cursor},
-//			cursorType{other.cursorType},
+			cursor{other.cursor},
+			//cursorType{other.cursorType},
 			backgroundShape{other.backgroundShape},
 			prompt{other.prompt},
-			noNewPrompt{other.noNewPrompt}/*,
 			drawCursor{other.drawCursor},
-			blinkClock{other.blinkClock}*/
+			blinkClock{other.blinkClock}
 		{}
 
 		Console::Console(Console&& other)
@@ -87,62 +121,22 @@ namespace dbr
 			hasFocus{other.hasFocus},
 			background{other.background},
 			baseForeground{other.baseForeground},
-//			cursorBlinkPeriod{other.cursorBlinkPeriod},
+			cursorBlinkPeriod{other.cursorBlinkPeriod},
 			commands{std::move(other.commands)},
+			entryHistory(std::move(other.entryHistory)),
 			font{other.font},
-			texts{std::move(other.texts)},
-			entryBufferLen{other.entryBufferLen},
 			size{other.size},
-			charSize{other.charSize},
+			charScale{other.charScale},
 			contentView{other.contentView},
-//			cursorPosition{other.cursorPosition},
 			lineNumber{other.lineNumber},
-//			cursor{other.cursor},
-//			cursorType{other.cursorType},
+			cursor{other.cursor},
+			//cursorType{other.cursorType},
 			backgroundShape{other.backgroundShape},
 			prompt{other.prompt},
-			noNewPrompt{other.noNewPrompt}/*,
 			drawCursor{other.drawCursor},
-			blinkClock{other.blinkClock}*/
+			blinkClock{other.blinkClock}
 		{
-			other.entryHandler = nullptr;
-			other.commands.clear();
 			other.font = nullptr;
-			other.texts.clear();
-		}
-
-
-		Console::Console(const sf::Vector2u& size, float charSize, const sf::String& prompt, const sf::Font* font)
-			: entryHandler{},
-			hasFocus{false},
-			background{0, 0, 0, 230},
-			baseForeground{sf::Color::White},
-//			cursorBlinkPeriod{sf::milliseconds(250)},
-			commands{},
-			font{font},
-			texts{},
-			entryBufferLen{0},
-			size{80, 24},
-			charSize{0, charSize},
-			contentView{{0, 0, static_cast<float>(size.x * charSize), static_cast<float>(size.y * charSize)}},
-//			cursorPosition{0, 0},
-			lineNumber{0},
-//			cursor{},
-//			cursorType{Cursor::Underscore},
-			backgroundShape{contentView.getSize()},
-			prompt{prompt},
-			noNewPrompt{false}/*,
-			drawCursor{false},
-			blinkClock{}*/
-		{
-			backgroundShape.setFillColor(background);
-			backgroundShape.setOutlineColor(baseForeground);
-			backgroundShape.setOutlineThickness(1);
-
-			if(font)
-				setFont(*font);
-
-			newPrompt(true);
 		}
 
 		void Console::update(const sf::Event& event)
@@ -151,9 +145,7 @@ namespace dbr
 			{
 				case sf::Event::TextEntered:
 				{
-					auto& entry = texts.back();
-
-					// non-printable unicode characters
+					// non-printable characters
 					if(event.text.unicode < 0x20 || (0x7F <= event.text.unicode && event.text.unicode <= 0x100))
 					{
 						// check for control characters
@@ -161,22 +153,17 @@ namespace dbr
 						constexpr std::uint32_t TAB = '\t';
 						constexpr std::uint32_t NEW_LINE = '\n';
 						constexpr std::uint32_t CARR_RETURN = '\r';
-						constexpr std::uint32_t ESCAPE = 0x1B;
 
 						switch(event.text.unicode)
 						{
 							case BACKSPACE:
 							{
 								// delete last character
-								auto& string = entry.getString();
-								entry.setString(string.substring(0, string.getSize() - 1));
-
-								// if we emptied the last buffer, but we always want to keep at least 1 sf::Text for the entry
-								if(string.isEmpty() && entryBufferLen > 1)
+								auto size = buffer.getSize();
+								if(size > 0)
 								{
-									texts.pop_back();
-									entry = texts.back();
-									--entryBufferLen;
+									buffer.erase(size - 1);
+									removeChars();
 								}
 
 								break;
@@ -184,36 +171,25 @@ namespace dbr
 
 							case TAB:
 								// auto-complete
-								
+
 								break;
 
 							case NEW_LINE:
 							case CARR_RETURN:
 							{
+								cursorAt(nextLine());
+
+								addHistory(buffer);
+
 								// submit buffer as command
-								sf::String entry;
+								if(!run(buffer))
+									addString("Command does not exist\n");
 
-								auto start = texts.end() - 1;
-								for(auto it = start; it != start - entryBufferLen; --it)
-								{
-									entry += it->getString();
-								}
-
-								if(!run(entry))
-									addText("Command does not exist", sf::Text::Style::Regular, baseForeground);
-
-								if(!noNewPrompt)
-									newPrompt();
-
-								noNewPrompt = false;
+								buffer.clear();
+								newPrompt();
 
 								break;
 							}
-
-							case ESCAPE:
-								// cancel current buffer?
-								
-								break;
 
 							default:
 								break;
@@ -223,19 +199,8 @@ namespace dbr
 					{
 						// printable character. add to current buffer
 
-						auto bounds = entry.getGlobalBounds();
-
-						// if we extend past the width of the console...
-						if(bounds.width - bounds.left + charSize.x >= backgroundShape.getGlobalBounds().width)
-						{
-							// add the following text on the next line
-							addText(event.text.unicode, sf::Text::Style::Regular, baseForeground);
-							++entryBufferLen;
-						}
-						else
-						{
-							entry.setString(entry.getString() + event.text.unicode);
-						}
+						buffer += event.text.unicode;
+						addChar(event.text.unicode);
 					}
 
 					break;
@@ -245,19 +210,25 @@ namespace dbr
 					switch(event.key.code)
 					{
 						case sf::Keyboard::Up:
-							// back in history
+							if(historyIndex > 0)
+								--historyIndex;
+							useHistory();
 							break;
 
 						case sf::Keyboard::Down:
-							// forward in history
+							if(historyIndex < entryHistory.size() - 1)
+								++historyIndex;
+							useHistory();
 							break;
 
 						case sf::Keyboard::Left:
-							// back in buffer
+							if(cursorIndex != 0)
+								cursorAt(cursorIndex - 1);
 							break;
 
 						case sf::Keyboard::Right:
-							// forward in buffer
+							if(cursorIndex != std::numeric_limits<decltype(cursorIndex)>::max())
+								cursorAt(cursorIndex + 1);
 							break;
 
 						default:
@@ -277,19 +248,19 @@ namespace dbr
 				default:
 					break;
 			}
-
-			/*if(blinkClock.getElapsedTime() >= cursorBlinkPeriod)
-			{
-				drawCursor = !drawCursor;
-				blinkClock.restart();
-			}*/
 		}
 
 		void Console::clear()
 		{
-			texts.clear();
-			newPrompt(true);
-			noNewPrompt = true;
+			buffer.clear();
+
+			for(auto& c : cells)
+			{
+				c.setColor(background);
+				c.setTexCoord({0, 0, 0, 0});
+			}
+
+			cursorAt(0);
 		}
 
 		void Console::addCommand(const sf::String& name, Command&& command)
@@ -318,81 +289,100 @@ namespace dbr
 			return true;
 		}
 
-		const sf::Font* Console::getFont() const
+		const sfml::BitmapFont* Console::getFont() const
 		{
 			return font;
 		}
 
-		void Console::setFont(const sf::Font& font)
+		void Console::setFont(const sfml::BitmapFont& font)
 		{
-			auto glyph = font.getGlyph(prompt[0], static_cast<unsigned int>(charSize.y), false);
-			charSize.x = glyph.advance;
+			auto charSize = font.getGlyphSize();
 
-			contentView.reset({0.f, 0.f, size.x * charSize.x, size.y * charSize.y});
+			auto width = static_cast<float>(size.x * charScale.x * charSize.x);
+			auto height = static_cast<float>(size.y * charScale.y * charSize.y);
+			contentView.reset({0.f, 0.f, width, height});
+
 			backgroundShape.setSize(contentView.getSize());
 
 			this->font = &font;
 		}
 
-		/*sf::Vector2u Console::cursorAt() const
+		std::size_t Console::cursorAt() const
 		{
-			return cursorPosition;
+			return cursorIndex;
 		}
 
-		void Console::cursorAt(const sf::Vector2u& pos)
+		void Console::cursorAt(std::size_t idx)
 		{
-			cursorPosition = pos;
-		}*/
+			cursorIndex = idx;
 
-		float Console::characterSize() const
-		{
-			return charSize.y;
+			auto charSize = font->getGlyphSize();
+			cursor.setPosition(cursorIndex % size.x * charScale.x * charSize.x, cursorIndex / size.x * charScale.y * charSize.y);
 		}
 
-		void Console::characterSize(float val)
+		sf::Vector2f Console::characterScale() const
 		{
-			charSize.y = val;
+			return charScale;
+		}
 
-			for(auto& t : texts)
-				t.setCharacterSize(static_cast<unsigned int>(charSize.y));
-
+		void Console::characterScale(sf::Vector2f scale)
+		{
+			charScale = scale;
 			setupSizes();
 		}
 
-		void Console::addText(const sf::String& str, sf::Text::Style style, sf::Color foreground, bool newline)
+		void Console::addChar(sf::Uint32 unicode)
 		{
-			// if we don't have a font, do nothing
-			if(font == nullptr)
-				return;
-
-			sf::Text txt{str, *font, static_cast<unsigned int>(charSize.y)};
-
-			sf::FloatRect prevBnds;
-			if(!texts.empty())
+			if(unicode == '\n')
 			{
-				prevBnds = texts.back().getGlobalBounds();
-				prevBnds.top -= texts.back().getLocalBounds().top;
+				cursorAt(nextLine());
 			}
-
-			if(newline)
-				txt.setPosition(0, prevBnds.top + std::max(prevBnds.height, charSize.y));
 			else
-				txt.setPosition(prevBnds.left + prevBnds.width, prevBnds.top);
+			{
+				// don't mess with spaces
+				if(unicode != ' ')
+				{
+					// check for reaching end of screen
+					if(cursorIndex >= size.x * size.y)
+						clear();
 
-			txt.setColor(foreground);
-			txt.setStyle(style);
+					auto charSize = static_cast<sf::Vector2f>(font->getGlyphSize());
+					auto& glyph = font->getTextureCoord(unicode);
 
-			texts.push_back(txt);
+					cells[cursorIndex].setTexCoord({static_cast<float>(glyph.x), static_cast<float>(glyph.y), charSize.x, charSize.y});
+					cells[cursorIndex].setColor(baseForeground);
+				}
+
+				cursorAt(cursorIndex + 1);
+			}
 		}
 
-		void Console::newPrompt(bool top)
+		void Console::addString(const sf::String& str)
 		{
-			addText(prompt, sf::Text::Style::Regular, baseForeground, !top);
+			for(auto u : str)
+				addChar(u);
+		}
 
-			// new entry buffer
-			addText("", sf::Text::Style::Regular, baseForeground, false);
+		void Console::removeChars(std::size_t count)
+		{
+			for(auto i = 0u; i < count; ++i)
+			{
+				cursorAt(cursorIndex - 1);
 
-			entryBufferLen = 1;
+				cells[cursorIndex].setTexCoord({0.f, 0.f, 0.f, 0.f});
+				cells[cursorIndex].setColor(background);
+			}
+		}
+
+		std::size_t Console::nextLine()
+		{
+			return cursorIndex + size.x - cursorIndex % size.x;
+		}
+
+		void Console::newPrompt()
+		{
+			addString(prompt);
+			buffer.clear();
 		}
 
 		void Console::setupSizes()
@@ -400,9 +390,25 @@ namespace dbr
 
 		}
 
+		void Console::addHistory(const sf::String& str)
+		{
+			entryHistory.push_back(buffer);
+			historyIndex = entryHistory.size();
+		}
+
+		void Console::useHistory()
+		{
+			if(historyIndex < entryHistory.size())
+			{
+				removeChars(buffer.getSize());
+				buffer = entryHistory[historyIndex];
+				addString(buffer);
+			}
+		}
+
 		void Console::draw(sf::RenderTarget& target, sf::RenderStates states) const
 		{
-			states = states.transform * getTransform();
+			states.transform *= getTransform();
 			target.draw(backgroundShape, states);
 
 			auto prevView = target.getView();
@@ -411,18 +417,54 @@ namespace dbr
 			auto thisPos = getPosition();
 			auto thisScale = getScale();
 			auto thisSize = backgroundShape.getSize();
-
-			contentView.setViewport({thisPos.x / targetSize.x, thisPos.y / targetSize.y, thisScale.x * thisSize.x / targetSize.x, thisScale.y * thisSize.y / targetSize.y});
+			contentView.setViewport({thisScale.x * thisPos.x / targetSize.x, thisScale.y * thisPos.y / targetSize.y, thisScale.x * thisSize.x / targetSize.x, thisScale.y * thisSize.y / targetSize.y});
+			contentView.setCenter(thisSize / 2.f + thisPos);
 
 			target.setView(contentView);
 
-			for(auto& t : texts)
-				target.draw(t, states);
+			states.texture = &font->getTexture();
 
-			/*if(drawCursor)
-				target.draw(cursor, states);*/
+			// this cast is safe to do, since a Cell is just 4 sf::Vertex
+			target.draw(reinterpret_cast<const sf::Vertex*>(cells.data()), cells.size() * 4, sf::PrimitiveType::Quads, states);
+
+			if(drawCursor)
+				target.draw(cursor, states);
 
 			target.setView(prevView);
+
+			if(blinkClock.getElapsedTime() >= cursorBlinkPeriod)
+			{
+				drawCursor = !drawCursor;
+				blinkClock.restart();
+			}
+		}
+
+		void Console::Cell::setColor(sf::Color color)
+		{
+			for(auto& v : vertices)
+				v.color = color;
+		}
+
+		void Console::Cell::setPosition(sf::Vector2f pos)
+		{
+			for(int i = vertices.size() - 1; i > 0; --i)
+				vertices[i].position += (pos - vertices[0].position);
+			vertices[0].position = pos;
+		}
+
+		void Console::Cell::setSize(sf::Vector2f size)
+		{
+			vertices[1].position = vertices[0].position + sf::Vector2f{size.x, 0};
+			vertices[2].position = vertices[0].position + size;
+			vertices[3].position = vertices[0].position + sf::Vector2f{0, size.y};
+		}
+
+		void Console::Cell::setTexCoord(sf::FloatRect rect)
+		{
+			vertices[0].texCoords = {rect.left, rect.top};
+			vertices[1].texCoords = {rect.left + rect.width, rect.top};
+			vertices[2].texCoords = {rect.left + rect.width, rect.top + rect.height};
+			vertices[3].texCoords = {rect.left, rect.top + rect.height};
 		}
 	}
 }
@@ -444,7 +486,7 @@ namespace std
 		constexpr std::size_t prime = (2u << 23) + (2u << 7) + 0x93u;
 		constexpr std::size_t offset = 2166136261u;
 #else
-#	error This sf::String hash is not implemented for non 32-bit or 64-bit architectures (Or, do you have weird compiler settings for some reason?)
+#	error This sf::String hash is only implemented for x86 or x64 architectures
 #endif
 
 		auto* ptr = reinterpret_cast<const std::uint8_t*>(s.getData());
