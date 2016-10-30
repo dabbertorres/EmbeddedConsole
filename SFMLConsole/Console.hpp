@@ -50,17 +50,13 @@ namespace dbr
 		class Console : public sf::Drawable, public sf::Transformable
 		{
 		public:
-			/*enum class Cursor
-			{
-				Block,
-				Line,
-				Underscore,
-			};*/
-
 			Console(const sfml::BitmapFont& font);
 			Console(const sf::String& prompt, const sfml::BitmapFont& font);
 
 			/// \param size Size in characters
+			/// \param charScale scaling factors of character size
+			/// \param prompt Prompt string to use
+			/// \param font a dbr::sfml::BitmapFont for text
 			Console(sf::Vector2u size, sf::Vector2f charScale, const sf::String& prompt, const sfml::BitmapFont& font);
 
 			Console(const Console& other);
@@ -89,9 +85,6 @@ namespace dbr
 			std::size_t cursorAt() const;
 			void cursorAt(std::size_t idx);
 
-			sf::Vector2f characterScale() const;
-			void characterScale(sf::Vector2f scale);
-
 			// provided if custom input handling is desired (ie: used for providing user access to a scripting language)
 			// Called when an entry does not match a provided command or "clear"
 			// all input is provided as a single argument
@@ -107,7 +100,7 @@ namespace dbr
 			sf::Time cursorBlinkPeriod;
 
 		private:
-			struct alignas(sf::Vertex) Cell
+			struct Cell
 			{
 				std::array<sf::Vertex, 4> vertices;
 
@@ -119,10 +112,15 @@ namespace dbr
 
 			void addChar(sf::Uint32 unicode);
 			void addString(const sf::String& str);
-			void removeChars(std::size_t count = 1);
+			void clearBuffer();
+
+			std::size_t bufferIndex();
+			void bufferIndex(std::size_t idx);
 			std::size_t nextLine();
 			void newPrompt();
+
 			void setupSizes();
+
 			void addHistory(const sf::String& str);
 			void useHistory();
 
@@ -149,9 +147,7 @@ namespace dbr
 			mutable sf::View contentView;
 
 			std::size_t cursorIndex;
-			std::size_t lineNumber;
 			sf::RectangleShape cursor;
-			/*Cursor cursorType;*/
 
 			sf::RectangleShape backgroundShape;
 

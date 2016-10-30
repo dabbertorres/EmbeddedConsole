@@ -65,9 +65,7 @@ namespace dbr
 			charScale{charScale},
 			contentView{{0, 0, static_cast<float>(size.x * font.getGlyphSize().x * charScale.x), static_cast<float>(size.y * font.getGlyphSize().y * charScale.y)}},
 			cursorIndex{0},
-			lineNumber{0},
 			cursor{{font.getGlyphSize().x * charScale.x, font.getGlyphSize().y * charScale.y}},
-			//cursorType{Cursor::Underscore},
 			backgroundShape{contentView.getSize()},
 			prompt{prompt},
 			drawCursor{false},
@@ -107,9 +105,7 @@ namespace dbr
 			size{other.size},
 			charScale{other.charScale},
 			contentView{other.contentView},
-			lineNumber{other.lineNumber},
 			cursor{other.cursor},
-			//cursorType{other.cursorType},
 			backgroundShape{other.backgroundShape},
 			prompt{other.prompt},
 			drawCursor{other.drawCursor},
@@ -128,9 +124,7 @@ namespace dbr
 			size{other.size},
 			charScale{other.charScale},
 			contentView{other.contentView},
-			lineNumber{other.lineNumber},
 			cursor{other.cursor},
-			//cursorType{other.cursorType},
 			backgroundShape{other.backgroundShape},
 			prompt{other.prompt},
 			drawCursor{other.drawCursor},
@@ -158,12 +152,14 @@ namespace dbr
 						{
 							case BACKSPACE:
 							{
-								// delete last character
-								auto size = buffer.getSize();
-								if(size > 0)
+								// delete character previous to buffer index and move index back by 1
+								auto buf = bufferIndex();
+								if(buf > 0)
 								{
-									buffer.erase(size - 1);
-									removeChars();
+									clearBuffer();
+									buffer.erase(buf - 1);
+									addString(buffer);
+									bufferIndex(buf - 1);
 								}
 
 								break;
@@ -222,14 +218,35 @@ namespace dbr
 							break;
 
 						case sf::Keyboard::Left:
-							if(cursorIndex != 0)
-								cursorAt(cursorIndex - 1);
+							bufferIndex(bufferIndex() - 1);
 							break;
 
 						case sf::Keyboard::Right:
-							if(cursorIndex != std::numeric_limits<decltype(cursorIndex)>::max())
-								cursorAt(cursorIndex + 1);
+							bufferIndex(bufferIndex() + 1);
 							break;
+
+						case sf::Keyboard::Home:
+							bufferIndex(0);
+							break;
+
+						case sf::Keyboard::End:
+							bufferIndex(buffer.getSize());
+							break;
+
+						case sf::Keyboard::Delete:
+						{
+							// delete character at buffer index
+							auto buf = bufferIndex();
+							if(!buffer.isEmpty() && buf < buffer.getSize())
+							{
+								clearBuffer();
+								buffer.erase(buf);
+								addString(buffer);
+								bufferIndex(buf);
+							}
+
+							break;
+						}
 
 						default:
 							break;
@@ -320,17 +337,6 @@ namespace dbr
 			cursor.setPosition(cursorIndex % size.x * charScale.x * charSize.x, cursorIndex / size.x * charScale.y * charSize.y);
 		}
 
-		sf::Vector2f Console::characterScale() const
-		{
-			return charScale;
-		}
-
-		void Console::characterScale(sf::Vector2f scale)
-		{
-			charScale = scale;
-			setupSizes();
-		}
-
 		void Console::addChar(sf::Uint32 unicode)
 		{
 			if(unicode == '\n')
@@ -363,15 +369,26 @@ namespace dbr
 				addChar(u);
 		}
 
-		void Console::removeChars(std::size_t count)
+		void Console::clearBuffer()
 		{
-			for(auto i = 0u; i < count; ++i)
-			{
-				cursorAt(cursorIndex - 1);
+			bufferIndex(0);
 
-				cells[cursorIndex].setTexCoord({0.f, 0.f, 0.f, 0.f});
-				cells[cursorIndex].setColor(background);
+			for(auto i = 0u; i < buffer.getSize(); ++i)
+			{
+				cells[cursorIndex + i].setTexCoord({0.f, 0.f, 0.f, 0.f});
+				cells[cursorIndex + i].setColor(background);
 			}
+		}
+
+		std::size_t Console::bufferIndex()
+		{
+			return cursorIndex % size.x - prompt.getSize();
+		}
+
+		void Console::bufferIndex(std::size_t idx)
+		{
+			if(idx <= buffer.getSize())
+				cursorAt(cursorIndex + idx - bufferIndex());
 		}
 
 		std::size_t Console::nextLine()
@@ -398,12 +415,9 @@ namespace dbr
 
 		void Console::useHistory()
 		{
-			if(historyIndex < entryHistory.size())
-			{
-				removeChars(buffer.getSize());
-				buffer = entryHistory[historyIndex];
-				addString(buffer);
-			}
+			clearBuffer();
+			buffer = historyIndex < entryHistory.size() ? entryHistory[historyIndex] : "";
+			addString(buffer);
 		}
 
 		void Console::draw(sf::RenderTarget& target, sf::RenderStates states) const
@@ -424,7 +438,7 @@ namespace dbr
 
 			states.texture = &font->getTexture();
 
-			// this cast is safe to do, since a Cell is just 4 sf::Vertex
+			// this cast is safe to do, since a Cell is just 4 sf::Vertex, and cells is contiguous memory
 			target.draw(reinterpret_cast<const sf::Vertex*>(cells.data()), cells.size() * 4, sf::PrimitiveType::Quads, states);
 
 			if(drawCursor)
