@@ -155,12 +155,7 @@ namespace dbr
 								// delete character previous to buffer index and move index back by 1
 								auto buf = bufferIndex();
 								if(buf > 0)
-								{
-									clearBuffer();
-									buffer.erase(buf - 1);
-									addString(buffer);
-									bufferIndex(buf - 1);
-								}
+									deleteAt(buf - 1);
 
 								break;
 							}
@@ -234,31 +229,11 @@ namespace dbr
 							break;
 
 						case sf::Keyboard::Delete:
-						{
-							// delete character at buffer index
-							auto buf = bufferIndex();
-							if(!buffer.isEmpty() && buf < buffer.getSize())
-							{
-								clearBuffer();
-								buffer.erase(buf);
-								addString(buffer);
-								bufferIndex(buf);
-							}
-
+							deleteAt(bufferIndex());
 							break;
-						}
 
 						default:
 							break;
-					}
-					break;
-
-				case sf::Event::MouseWheelScrolled:
-					// scroll only with a vertical wheel
-					if(event.mouseWheelScroll.wheel == sf::Mouse::Wheel::VerticalWheel)
-					{
-						// move the view
-						event.mouseWheelScroll.delta;
 					}
 					break;
 
@@ -377,6 +352,17 @@ namespace dbr
 			{
 				cells[cursorIndex + i].setTexCoord({0.f, 0.f, 0.f, 0.f});
 				cells[cursorIndex + i].setColor(background);
+			}
+		}
+
+		void Console::deleteAt(std::size_t bufIdx)
+		{
+			if(!buffer.isEmpty() && bufIdx < buffer.getSize())
+			{
+				clearBuffer();
+				buffer.erase(bufIdx);
+				addString(buffer);
+				bufferIndex(bufIdx);
 			}
 		}
 

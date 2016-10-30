@@ -113,6 +113,7 @@ namespace dbr
 			void addChar(sf::Uint32 unicode);
 			void addString(const sf::String& str);
 			void clearBuffer();
+			void deleteAt(std::size_t bufIdx);
 
 			std::size_t bufferIndex();
 			void bufferIndex(std::size_t idx);
